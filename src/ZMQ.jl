@@ -495,6 +495,32 @@ function recv(socket::Socket)
     end
     return zmsg
 end
+
+function multirecv(socket::Socket)
+    zmsg = Message()
+    multiPart = Message[]
+    while true
+        rc = ccall((:zmq_msg_recv, zmq), Cint, (Ptr{Message}, Ptr{Void}, Cint),
+                    &zmsg, socket.data, NOBLOCK)
+        if rc == -1
+            if errno() == Base.EAGAIN
+                while (get_events(socket) & POLLIN) == 0
+                    wait(socket; readable = true)
+                end
+                continue
+            end 
+            throw(StateError(jl_zmq_error_str()))
+        else
+            push!(multiPart, zmsg)
+            if ismore(socket)
+                zmsg = Message()
+                continue
+            end
+        end
+        break
+    end
+    return multiPart
+end
 end # end v3only
 
 ## Constants
